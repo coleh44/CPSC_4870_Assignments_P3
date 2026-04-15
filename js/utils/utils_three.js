@@ -644,11 +644,11 @@ export class ThreeEngine {
             this.num_plane_objects_used_on_curr_frame = 0;
 
             f();
-    
+
             if (this.controls) {
                 this.controls.update();
             }
-    
+
             this.renderer.render(this.scene, this.camera);
 
             // this.line_objects.forEach((line) => {
@@ -11636,4 +11636,3 @@ export function set_material_color_from_texture(object, path_to_texture) {
 
     object.material = material;
 }
-

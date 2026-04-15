@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
     <title>CPSC 487/587</title>
-    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/10.3.0/math.min.js"></script>
@@ -21,6 +20,15 @@
 <body>
 <script type="module">
     import {ThreeEngine} from "../js/utils/utils_three.js";
+    import {get_default_lil_gui, refresh_displays} from "../js/utils/utils_three.js";
+    import {
+        mul_matrix_matrix,
+        add_matrix_matrix,
+        identity_matrix,
+        mul_matrix_scalar,
+        sub_matrix_matrix,
+        transpose
+    } from "../js/utils/utils_math.js";
 
     // todo: create a visualization that demonstrates your knowledge of displacement-based
     // todo: distance over SE(3).  Note that this will use your logarithm solution from PS_U3,
@@ -69,7 +77,248 @@
         return adjugate;
     }
 
+    let settings = {
+        rx1: 0.0,
+        ry1: 0.0,
+        rz1: 0.0,
+        tx1: 0.0,
+        ty1: 0.0,
+        tz1: 0.0,
 
+        rx2: 0.0,
+        ry2: 0.0,
+        rz2: 0.0,
+        tx2: 0.0,
+        ty2: 0.0,
+        tz2: 0.0,
+
+        disp_based_dis: 0.0
+    };
+
+    let gui = get_default_lil_gui();
+
+    let actions = {
+        reset1: function() {
+            settings.rx1 = 0.0;
+            settings.ry1 = 0.0;
+            settings.rz1 = 0.0;
+            settings.tx1 = 0.0;
+            settings.ty1 = 0.0;
+            settings.tz1 = 0.0;
+            refresh_displays(gui);
+        },
+
+        reset2: function() {
+            settings.rx2 = 0.0;
+            settings.ry2 = 0.0;
+            settings.rz2 = 0.0;
+            settings.tx2 = 0.0;
+            settings.ty2 = 0.0;
+            settings.tz2 = 0.0;
+            refresh_displays(gui);
+        }
+    };
+
+    gui.add(settings, "rx1", -Math.PI, Math.PI).name("rx1");
+    gui.add(settings, "ry1", -Math.PI, Math.PI).name("ry1");
+    gui.add(settings, "rz1", -Math.PI, Math.PI).name("rz1");
+    gui.add(settings, "tx1", -2, 2).name("tx1");
+    gui.add(settings, "ty1", -2, 2).name("ty1");
+    gui.add(settings, "tz1", -2, 2).name("tz1");
+    gui.add(actions, "reset1").name("Reset1");
+
+    gui.add(settings, "rx2", -Math.PI, Math.PI).name("rx2");
+    gui.add(settings, "ry2", -Math.PI, Math.PI).name("ry2");
+    gui.add(settings, "rz2", -Math.PI, Math.PI).name("rz2");
+    gui.add(settings, "tx2", -2, 2).name("tx2");
+    gui.add(settings, "ty2", -2, 2).name("ty2");
+    gui.add(settings, "tz2", -2, 2).name("tz2");
+    gui.add(actions, "reset2").name("Reset2");
+
+    gui.add(settings, "disp_based_dis").name("disp based dis").listen().disable();
+
+    let engine = ThreeEngine.new_default_3d();
+
+    engine.animation_loop(() => {
+        // compute rotation matrices from XYZ euler angles
+        let Rx1 = [
+            [1, 0, 0],
+            [0, Math.cos(settings.rx1), -Math.sin(settings.rx1)],
+            [0, Math.sin(settings.rx1),  Math.cos(settings.rx1)]
+        ];
+        let Ry1 = [
+            [ Math.cos(settings.ry1), 0, Math.sin(settings.ry1)],
+            [0, 1, 0],
+            [-Math.sin(settings.ry1), 0, Math.cos(settings.ry1)]
+        ];
+        let Rz1 = [
+            [Math.cos(settings.rz1), -Math.sin(settings.rz1), 0],
+            [Math.sin(settings.rz1),  Math.cos(settings.rz1), 0],
+            [0, 0, 1]
+        ];
+        let Rx2 = [
+            [1, 0, 0],
+            [0, Math.cos(settings.rx2), -Math.sin(settings.rx2)],
+            [0, Math.sin(settings.rx2),  Math.cos(settings.rx2)]
+        ];
+        let Ry2 = [
+            [ Math.cos(settings.ry2), 0, Math.sin(settings.ry2)],
+            [0, 1, 0],
+            [-Math.sin(settings.ry2), 0, Math.cos(settings.ry2)]
+        ];
+        let Rz2 = [
+            [Math.cos(settings.rz2), -Math.sin(settings.rz2), 0],
+            [Math.sin(settings.rz2),  Math.cos(settings.rz2), 0],
+            [0, 0, 1]
+        ];
+        let R1 = mul_matrix_matrix(mul_matrix_matrix(Rz1, Ry1), Rx1);
+        let R2 = mul_matrix_matrix(mul_matrix_matrix(Rz2, Ry2), Rx2);
+
+        //compute vector endpoints assuming fixed origin
+        let x1 = [R1[0][0], R1[1][0], R1[2][0]]
+        let y1 = [R1[0][1], R1[1][1], R1[2][1]]
+        let z1 = [R1[0][2], R1[1][2], R1[2][2]]
+        let x2 = [R2[0][0], R2[1][0], R2[2][0]]
+        let y2 = [R2[0][1], R2[1][1], R2[2][1]]
+        let z2 = [R2[0][2], R2[1][2], R2[2][2]]
+
+        // compute new translation origin and endpoints:
+        let origin1 = [settings.tx1, settings.ty1, settings.tz1];
+        let origin2 = [settings.tx2, settings.ty2, settings.tz2];
+        let x1_end = [origin1[0] + x1[0],origin1[1] + x1[1],origin1[2] + x1[2]];
+        let y1_end = [origin1[0] + y1[0], origin1[1] + y1[1], origin1[2] + y1[2]];
+        let z1_end = [origin1[0] + z1[0], origin1[1] + z1[1], origin1[2] + z1[2]];
+        let x2_end = [origin2[0] + x2[0], origin2[1] + x2[1], origin2[2] + x2[2]];
+        let y2_end = [origin2[0] + y2[0], origin2[1] + y2[1], origin2[2] + y2[2]];
+        let z2_end = [origin2[0] + z2[0], origin2[1] + z2[1],origin2[2] + z2[2]];
+
+        // draw vectors
+        engine.draw_debug_vector(origin1, x1_end, 0.02, 0.2, 0xff0000, 1);
+        engine.draw_debug_vector(origin1, y1_end, 0.02, 0.2, 0x00aa00, 1);
+        engine.draw_debug_vector(origin1, z1_end, 0.02, 0.2, 0x0000ff, 1);
+        engine.draw_debug_vector(origin2, x2_end, 0.02, 0.2, 0x8b0000, 1);
+        engine.draw_debug_vector(origin2, y2_end, 0.02, 0.2, 0x006400, 1);
+        engine.draw_debug_vector(origin2, z2_end, 0.02, 0.2, 0x00008b, 1);
+
+        // displacement-based distance
+
+        //Step 1: disp(T1,T2) = (T1^-1)(T2)
+
+        //T1^-1
+        let t1 = [[origin1[0]], [origin1[1]], [origin1[2]]];
+        let R1_inv = transpose(R1);
+        let t1_inv = mul_matrix_matrix(R1_inv, t1);
+        t1_inv[0][0] = -t1_inv[0][0];
+        t1_inv[1][0] = -t1_inv[1][0];
+        t1_inv[2][0] = -t1_inv[2][0];
+
+        let T_1_inv = [
+            [R1_inv[0][0], R1_inv[0][1], R1_inv[0][2], t1_inv[0][0]],
+            [R1_inv[1][0], R1_inv[1][1], R1_inv[1][2], t1_inv[1][0]],
+            [R1_inv[2][0], R1_inv[2][1], R1_inv[2][2], t1_inv[2][0]],
+            [0, 0, 0, 1]
+        ];
+
+        let T_2 = [
+            [R2[0][0], R2[0][1], R2[0][2], origin2[0]],
+            [R2[1][0], R2[1][1], R2[1][2], origin2[1]],
+            [R2[2][0], R2[2][1], R2[2][2], origin2[2]],
+            [0, 0, 0, 1]
+        ];
+
+        //disp(T_1,T_2) = (T1^-1)(T2)
+        let disp = mul_matrix_matrix(T_1_inv, T_2);
+
+        //Step 2: Compute ln(disp)
+
+        //Step 2.A. Compute log map of just the SO(3) part of disp
+        let R_rot = [
+            [disp[0][0], disp[0][1], disp[0][2]],
+            [disp[1][0], disp[1][1], disp[1][2]],
+            [disp[2][0], disp[2][1], disp[2][2]]
+        ];
+
+        //compute trace
+        let trace = R_rot[0][0] + R_rot[1][1] + R_rot[2][2];
+        //compute beta = arccos((tr(R) - 1) / 2)
+        let beta = Math.acos((trace - 1) / 2);
+
+        //compute R - R^T
+        let R_rot_T = transpose(R_rot);
+        let R_rot_minus_R_rot_T = sub_matrix_matrix(R_rot, R_rot_T);
+
+        //compute log map of SO(3) part of disp
+        let SO3_log = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+
+        // case 1: abs(beta) < 0.0001
+        if(Math.abs(beta) < 0.0001) {
+            SO3_log = mul_matrix_scalar(R_rot_minus_R_rot_T, 0.5 + (beta * beta) / 12 + (7 * Math.pow(beta, 4)) / 720);
+        }
+        // case 2: beta = pi (abs(beta) - pi < .0001)
+        else if(Math.abs(beta - Math.PI) < 0.0001) {
+            SO3_log =  [
+                [0, -Math.PI * Math.sqrt(0.5 * (R_rot[2][2] + 1)), Math.PI * Math.sqrt(0.5 * (R_rot[1][1] + 1))],
+                [Math.PI * Math.sqrt(0.5 * (R_rot[2][2] + 1)), 0, -Math.PI * Math.sqrt(0.5 * (R_rot[0][0] + 1))],
+                [-Math.PI * Math.sqrt(0.5 * (R_rot[1][1] + 1)), Math.PI * Math.sqrt(0.5 * (R_rot[0][0] + 1)), 0]
+            ];
+        }
+        //case 3: else
+        else {
+            SO3_log = mul_matrix_scalar(R_rot_minus_R_rot_T, beta / (2 * Math.sin(beta)));
+        }
+
+        // Step 2.B. Compute C^-1t
+        //Step 2.B.I. Compute C using SO3_log
+        //compute beta = ||u|| = ||[a1,a2,a3]||
+        let beta_C = Math.sqrt(SO3_log[2][1] * SO3_log[2][1] + SO3_log[0][2] * SO3_log[0][2] + SO3_log[1][0] * SO3_log[1][0]);
+
+        // compute p
+        let p = 0;
+        if (Math.abs(beta_C) < 0.0001) {
+            p = 0.5 - (beta_C * beta_C) / 24 + Math.pow(beta_C, 4) / 720;
+        }
+        else {
+            p = (1 - Math.cos(beta_C)) / (beta_C * beta_C);
+        }
+
+        // compute q
+        let q = 0;
+        if (Math.abs(beta_C) < 0.0001) {
+            q = 1/6 - (beta_C * beta_C) / 120 + Math.pow(beta_C, 4) / 5040;
+        }
+        else {
+            q = (beta_C - Math.sin(beta_C)) / Math.pow(beta_C, 3);
+        }
+
+        // compute A^2
+        let SO3_log_squared = mul_matrix_matrix(SO3_log, SO3_log);
+
+        // compute I
+        let I = identity_matrix(3);
+
+        // C = I + pA + qA^2
+        let pA = mul_matrix_scalar(SO3_log, p);
+        let qA2 = mul_matrix_scalar(SO3_log_squared, q);
+        let C = add_matrix_matrix(add_matrix_matrix(I, pA), qA2);
+
+        //Step 2.B.II. Compute C^-1
+        let C_inv = matrix_inverse_3x3(C);
+        //C^-1t
+        let t = [[disp[0][3]], [disp[1][3]], [disp[2][3]]];
+        let C_inv_t = mul_matrix_matrix(C_inv, t);
+        //Extract free parameters into a vector
+        let V = [
+            SO3_log[2][1],
+            SO3_log[0][2],
+            SO3_log[1][0],
+            C_inv_t[0][0],
+            C_inv_t[1][0],
+            C_inv_t[2][0]
+        ];
+
+        //compute l2-squared norm of V
+        settings.disp_based_dis = Math.sqrt(V[0]**2 + V[1]**2 + V[2]**2 + V[3]**2 + V[4]**2 + V[5]**2);
+    });
 
 </script>
 </body>

@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
     <title>CPSC 487/587</title>
-    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/10.3.0/math.min.js"></script>
@@ -21,10 +20,134 @@
 <body>
 <script type="module">
     import {get_default_lil_gui, ThreeEngine, refresh_displays} from "../js/utils/utils_three.js";
-
     // todo: create a visualization that demonstrates your knowledge of quaternions.  This is intentionally
     // todo: open-ended.  Be as creative as you want, or feel free to recreate any of the visualizations
     // todo: found in Section 3.3.
+
+    // In this visualization, I demonstrated how quaternion Euler angles can access all of 3d-rotation space.
+    let settings = {
+        theta1: 0.0,
+        theta2: 0.0,
+        theta3: 0.0,
+        w: 1.0,
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+        norm: 1.0
+    };
+
+    let actions = {
+        reset: function () {
+            settings.theta1 = 0.0;
+            settings.theta2 = 0.0;
+            settings.theta3 = 0.0;
+            settings.w = 1.0;
+            settings.x = 0.0;
+            settings.y = 0.0;
+            settings.z = 0.0;
+            settings.norm = 1.0;
+            refresh_displays(gui);
+        }
+    };
+
+    let gui = get_default_lil_gui();
+    let controls = gui.addFolder("Controls");
+
+    controls.add(settings, "theta1", -Math.PI, Math.PI).name("theta1");
+    controls.add(settings, "theta2", -Math.PI, Math.PI).name("theta2");
+    controls.add(settings, "theta3", -Math.PI, Math.PI).name("theta3");
+
+    controls.add(settings, "w").name("w").listen().disable();
+    controls.add(settings, "x").name("x").listen().disable();
+    controls.add(settings, "y").name("y").listen().disable();
+    controls.add(settings, "z").name("z").listen().disable();
+    controls.add(settings, "norm").name("norm").listen().disable();
+
+    controls.add(actions, "reset").name("reset");
+    controls.open();
+
+    function multiplyquaternions(q1, q2) {
+        // w = w1*w2 - (x1*x2 + y1*y2 + z1*z2)
+        // x = w1*x2 + w2*x1 + (y1*z2 - z1*y2)
+        // y = w1*y2 + w2*y1 + (z1*x2 - x1*z2)
+        // z = w1*z2 + w2*z1 + (x1*y2 - y1*x2)
+        let q = [0, 0, 0, 0];
+
+        q[0] = q1[0]*q2[0] - (q1[1]*q2[1] + q1[2]*q2[2] + q1[3]*q2[3]); // w
+        q[1] = q1[0]*q2[1] + q2[0]*q1[1] + (q1[2]*q2[3] - q1[3]*q2[2]); // x
+        q[2] = q1[0]*q2[2] + q2[0]*q1[2] + (q1[3]*q2[1] - q1[1]*q2[3]); // y
+        q[3] = q1[0]*q2[3] + q2[0]*q1[3] + (q1[1]*q2[2] - q1[2]*q2[1]); // z
+        return q;
+    }
+
+    function conjugatequaternion(q) {
+        return [q[0], -q[1], -q[2], -q[3]];
+    }
+
+    let engine = ThreeEngine.new_default_3d();
+
+    engine.animation_loop(() => {
+        //Create quaternions for axis rotation:
+        let qx = [Math.cos(settings.theta1), Math.sin(settings.theta1), 0, 0];
+        let qy = [Math.cos(settings.theta2), 0, Math.sin(settings.theta2), 0];
+        let qz = [Math.cos(settings.theta3), 0, 0, Math.sin(settings.theta3)];
+
+        //complete quaternion multiplication:
+        let q_mult = multiplyquaternions(multiplyquaternions(qx, qy), qz);
+
+        //Create axis vectors and corresponding quaternions:
+        let v_x = [1, 0, 0];
+        let v_y = [0, 1, 0];
+        let v_z = [0, 0, 1];
+        let v_x_quat = [0, v_x[0], v_x[1], v_x[2]];
+        let v_y_quat = [0, v_y[0], v_y[1], v_y[2]];
+        let v_z_quat = [0, v_z[0], v_z[1], v_z[2]];
+
+        //rotate each quaternion using the Euler quaternion and then the q_mult inverse (conjugate for unit quaternions)
+        let q_conj = [q_mult[0], -q_mult[1], -q_mult[2], -q_mult[3]];
+
+        let v_x_rot_quat = multiplyquaternions(multiplyquaternions(q_mult, v_x_quat), q_conj);
+        let v_y_rot_quat = multiplyquaternions(multiplyquaternions(q_mult, v_y_quat), q_conj);
+        let v_z_rot_quat = multiplyquaternions(multiplyquaternions(q_mult, v_z_quat), q_conj);
+
+        //get resulting vectors and draw
+        let v_x_rot = [v_x_rot_quat[1], v_x_rot_quat[2], v_x_rot_quat[3]];
+        let v_y_rot = [v_y_rot_quat[1], v_y_rot_quat[2], v_y_rot_quat[3]];
+        let v_z_rot = [v_z_rot_quat[1], v_z_rot_quat[2], v_z_rot_quat[3]];
+
+        engine.draw_debug_vector([0, 0, 0], v_x_rot, 0.02, 0.2, 0xff0000, 1);
+        engine.draw_debug_vector([0, 0, 0], v_y_rot, 0.02, 0.2, 0x00ff00, 1);
+        engine.draw_debug_vector([0, 0, 0], v_z_rot, 0.02, 0.2, 0x0000ff, 1);
+
+        //visualize constant w of quaternions using line segment at vector endpoint and point at w
+        let v_x_rot_w = v_x_rot_quat[0];
+        let v_y_rot_w = v_y_rot_quat[0];
+        let v_z_rot_w = v_z_rot_quat[0];
+
+        let v_x_line_start = [v_x_rot[0], v_x_rot[1], v_x_rot[2] - 0.25];
+        let v_x_line_end = [v_x_rot[0], v_x_rot[1], v_x_rot[2] + 0.25];
+        let v_y_line_start = [v_y_rot[0], v_y_rot[1], v_y_rot[2] - 0.25];
+        let v_y_line_end = [v_y_rot[0], v_y_rot[1], v_y_rot[2] + 0.25];
+        let v_z_line_start = [v_z_rot[0], v_z_rot[1], v_z_rot[2] - 0.25];
+        let v_z_line_end = [v_z_rot[0], v_z_rot[1], v_z_rot[2] + 0.25];
+
+        engine.draw_debug_line(v_x_line_start, v_x_line_end, 0.035, undefined, 0x000000);
+        engine.draw_debug_line(v_y_line_start, v_y_line_end, 0.035, undefined, 0x000000);
+        engine.draw_debug_line(v_z_line_start, v_z_line_end, 0.035, undefined, 0x000000);
+
+        engine.draw_debug_sphere(v_x_rot, 0.05, 0xD6E4EA, 1);
+        engine.draw_debug_sphere(v_y_rot, 0.05,0xD6E4EA, 1);
+        engine.draw_debug_sphere(v_z_rot, 0.05, 0xD6E4EA, 1);
+
+        //update settings
+        settings.w = q_mult[0];
+        settings.x = q_mult[1];
+        settings.y = q_mult[2];
+        settings.z = q_mult[3];
+
+        settings.norm = Math.sqrt(q_mult[0]**2 + q_mult[1]**2 + q_mult[2]**2 + q_mult[3]**2);
+    });
+
 
 </script>
 </body>
